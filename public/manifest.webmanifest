@@ -1,0 +1,8 @@
+{
+  "name": "Name the World",
+  "short_name": "Name World",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#f8f7f3",
+  "theme_color": "#f8f7f3"
+}

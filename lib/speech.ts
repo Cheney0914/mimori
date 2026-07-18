@@ -1,0 +1,6 @@
+"use client";
+import { useEffect, useState } from "react"; import { LanguageCode } from "@/lib/types";
+export type SpeechCapability={status:"available";voiceFound:boolean}|{status:"unsupported"}|{status:"voice_unavailable"};
+const findVoice=(language:LanguageCode)=>window.speechSynthesis.getVoices().some(voice=>voice.lang.toLowerCase().startsWith(language));
+export function useSpeechCapability(language:LanguageCode){const [capability,setCapability]=useState<SpeechCapability>({status:"unsupported"});useEffect(()=>{if(!window.speechSynthesis){setCapability({status:"unsupported"});return}const update=()=>setCapability(findVoice(language)?{status:"available",voiceFound:true}:{status:"voice_unavailable"});update();window.speechSynthesis.addEventListener("voiceschanged",update);return()=>{window.speechSynthesis.removeEventListener("voiceschanged",update);window.speechSynthesis.cancel();};},[language]);return capability;}
+export function speak(text:string,language:LanguageCode){if(typeof window==="undefined"||!window.speechSynthesis||!findVoice(language))return false;window.speechSynthesis.cancel();const utterance=new SpeechSynthesisUtterance(text);utterance.lang=language==="ja"?"ja-JP":"en-US";window.speechSynthesis.speak(utterance);return true;}
