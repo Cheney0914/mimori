@@ -26,8 +26,9 @@ test("database v2 has language-scene association storage", async () => {
 test("real adapter stays server-side and normalizes provider concepts", async () => {
   const source = await readFile(new URL("../lib/real-vision-adapter.ts", import.meta.url), "utf8");
   assert.match(source, /VISION_API_KEY/);
+  assert.match(source, /VISION_PROVIDER/);
+  assert.match(source, /gemini/);
   assert.match(source, /normalizeConcept/);
-  assert.match(source, /response_format/);
   assert.match(source, /NO_CLEAR_OBJECT/);
 });
 
@@ -36,4 +37,17 @@ test("recognition service keeps mock and real selection behind the API", async (
   assert.match(source, /MockVisionAdapter/);
   assert.match(source, /RealVisionAdapter/);
   assert.match(source, /RECOGNITION_MODE/);
+});
+
+test("vision evaluator remains temporary and does not write to the user world", async () => {
+  const source = await readFile(new URL("../app/dev/vision-test/page.tsx", import.meta.url), "utf8");
+  assert.match(source, /compressImage/);
+  assert.match(source, /Raw provider response/);
+  assert.match(source, /api\/recognize\?evaluation=1/);
+});
+
+test("vision evaluation raw output is gated outside production", async () => {
+  const source = await readFile(new URL("../app/api/recognize/route.ts", import.meta.url), "utf8");
+  assert.match(source, /VISION_PLAYGROUND_ENABLED/);
+  assert.match(source, /VERCEL_ENV==="preview"/);
 });

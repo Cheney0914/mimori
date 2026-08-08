@@ -1,6 +1,6 @@
 import { concepts, getConcept } from "@/lib/concepts";
 import { LanguageCode, RecognitionCandidate, RecognitionResult } from "@/lib/types";
-const aliases:Record<string,string>={"coffee cup with handle":"mug","ceramic coffee mug":"mug","drink cup":"mug","coffee cup":"mug","rain umbrella":"umbrella"};
+const aliases:Record<string,string>={"coffee cup with handle":"mug","ceramic coffee mug":"mug","coffee mug":"mug","cup with handle":"mug","drink cup":"mug","coffee cup":"mug","drinking glass":"glass","glass cup":"glass","computer mouse":"mouse","wireless mouse":"mouse","ballpoint pen":"pen","tv remote":"remote","remote control":"remote","rain umbrella":"umbrella"};
 export const normalizeConcept = (raw: string) => {const key=raw.trim().toLowerCase();const normalized=aliases[key]??key;return concepts.find((item) => [item.id, item.canonicalName, ...item.aliases].some((alias) => alias.toLowerCase() === normalized));};
 export const candidateFor = (conceptId: string, language: LanguageCode, confidence = .91): RecognitionCandidate => { const concept = getConcept(conceptId) ?? concepts[0]; return { conceptId: concept.id, canonicalName: concept.canonicalName, confidence, sceneSuggestion: concept.defaultScene, localized: concept.terms[language] }; };
 export function mockRecognition(language: LanguageCode, requestId: string): RecognitionResult {
