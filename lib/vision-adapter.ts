@@ -1,7 +1,8 @@
 import { LanguageCode, RecognitionResult } from "@/lib/types";
 
 export type VisionRecognitionInput = { image: Blob; language: LanguageCode; requestId: string };
-export type VisionEvaluation = { result: RecognitionResult; rawResponse: unknown };
+export type RecognitionDiagnostics = { providerDurationMs: number };
+export type VisionEvaluation = { result: RecognitionResult; rawResponse: unknown; diagnostics: RecognitionDiagnostics };
 
 // The application depends only on this boundary; provider request/response shapes stay behind it.
 export interface VisionAdapter {

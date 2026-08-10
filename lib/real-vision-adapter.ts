@@ -17,16 +17,17 @@ export class RealVisionAdapter implements VisionAdapter {
 
   async recognizeForEvaluation({image,language,requestId}:VisionRecognitionInput):Promise<VisionEvaluation>{
     const key=process.env.VISION_API_KEY; const model=process.env.VISION_MODEL; const provider=process.env.VISION_PROVIDER;
-    if(!key||!model||provider!=="gemini")return {result:error(requestId,"PROVIDER_ERROR","Recognition is unavailable."),rawResponse:{error:"Gemini is not configured."}};
+    if(!key||!model||provider!=="gemini")return {result:error(requestId,"PROVIDER_ERROR","Recognition is unavailable."),rawResponse:{error:"Gemini is not configured."},diagnostics:{providerDurationMs:0}};
     const controller=new AbortController(); const timeout=setTimeout(()=>controller.abort(),8000);
+    const startedAt=Date.now();
     try{
       const bytes=Buffer.from(await image.arrayBuffer()); const mimeType=image.type||"image/jpeg";
       const response=await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent?key=${encodeURIComponent(key)}`,{method:"POST",signal:controller.signal,headers:{"Content-Type":"application/json"},body:JSON.stringify({systemInstruction:{parts:[{text:prompt}]},generationConfig:{temperature:0,responseMimeType:"application/json"},contents:[{role:"user",parts:[{text:"Name the central everyday object."},{inlineData:{mimeType,data:bytes.toString("base64")}}]}]})});
       const rawResponse=await response.json().catch(()=>({error:"Provider returned a non-JSON response."}));
-      if(!response.ok)return {result:error(requestId,"PROVIDER_ERROR","Recognition is unavailable."),rawResponse};
+      if(!response.ok)return {result:error(requestId,"PROVIDER_ERROR","Recognition is unavailable."),rawResponse:{status:response.status},diagnostics:{providerDurationMs:Date.now()-startedAt}};
       const payload=rawResponse as {candidates?:Array<{content?:{parts?:Array<{text?:unknown}>}}>} ;
       const text=payload.candidates?.[0]?.content?.parts?.map(part=>typeof part.text==="string"?part.text:"").join("");
-      return {result:toResult(parseContent(text),language,requestId),rawResponse};
-    }catch(cause){return {result:error(requestId,(cause as Error).name==="AbortError"?"TIMEOUT":"NETWORK_ERROR","Recognition is unavailable."),rawResponse:{error:(cause as Error).name==="AbortError"?"Request timed out.":"Network request failed."}};}finally{clearTimeout(timeout);}
+      return {result:toResult(parseContent(text),language,requestId),rawResponse,diagnostics:{providerDurationMs:Date.now()-startedAt}};
+    }catch(cause){return {result:error(requestId,(cause as Error).name==="AbortError"?"TIMEOUT":"NETWORK_ERROR","Recognition is unavailable."),rawResponse:{error:(cause as Error).name==="AbortError"?"Request timed out.":"Network request failed."},diagnostics:{providerDurationMs:Date.now()-startedAt}};}finally{clearTimeout(timeout);}
   }
 }

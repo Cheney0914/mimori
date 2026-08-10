@@ -8,12 +8,25 @@ test("recognition contracts keep candidate confirmation structured", async () =>
   assert.match(source, /candidates:/);
 });
 
-test("camera keeps timeout, offline, and duplicate-save guards", async () => {
+test("camera leaves every scan in a recoverable terminal state", async () => {
   const source = await readFile(new URL("../app/camera/page.tsx", import.meta.url), "utf8");
   assert.match(source, /AbortController/);
-  assert.match(source, /10000/);
+  assert.match(source, /setTimeout\(\(\) => aborter\.abort\(\), 9000\)/);
+  assert.match(source, /setTimeout\(\(\) => .*setSlowNaming\(true\).*2000/);
   assert.match(source, /navigator\.onLine/);
   assert.match(source, /saving\.current/);
+  assert.match(source, /setStatus\("result"\)/);
+  assert.match(source, /setStatus\(parsed\.code === "TIMEOUT" \? "timeout" : "error"\)/);
+  assert.match(source, /name === "AbortError" \? "timeout" : "error"/);
+});
+
+test("instant scan overlay is feature-flagged and releases the ephemeral frame", async () => {
+  const source = await readFile(new URL("../app/camera/page.tsx", import.meta.url), "utf8");
+  assert.match(source, /NEXT_PUBLIC_INSTANT_SCAN_OVERLAY/);
+  assert.match(source, /URL\.createObjectURL/);
+  assert.match(source, /URL\.revokeObjectURL/);
+  assert.match(source, /CocoSsdLocalObjectDetector/);
+  assert.match(source, /selectTargetDetection/);
 });
 
 test("database v2 has language-scene association storage", async () => {
