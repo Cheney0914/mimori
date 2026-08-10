@@ -6,10 +6,12 @@ import { RecognitionDiagnostics, VisionAdapter, VisionErrorClass, VisionEvaluati
 type ProviderCandidate = { concept?: unknown; confidence?: unknown; scene?: unknown };
 type ProviderPayload = { candidates?: unknown };
 type GeminiError = { error?: { code?: unknown; status?: unknown; message?: unknown } };
+type GeminiUsage = { usageMetadata?: { promptTokenCount?: unknown; candidatesTokenCount?: unknown; totalTokenCount?: unknown } };
 type ProviderAttempt = { response?: Response; rawResponse?: unknown; errorClass?: VisionErrorClass; localAbortFired?: boolean; providerDurationMs: number };
 const prompt = `You are an everyday object recognition system. Inspect one image containing one everyday object. Return strict JSON only: {"candidates":[{"concept":"mug","confidence":0.9,"scene":"kitchen"}]}. Prefer common vocabulary. Never use brand names, product names, decorative descriptions, overly specific taxonomy, markdown, or prose. Return more than one candidate only when genuinely uncertain.`;
 const error = (requestId:string,code:Extract<RecognitionResult,{status:"error"}>["code"],message:string):RecognitionResult=>({requestId,status:"error",code,message});
 const number = (value:unknown)=>typeof value==="number"?value:typeof value==="string"?Number(value):NaN;
+const wholeNumber = (value:unknown) => { const parsed=number(value); return Number.isInteger(parsed)&&parsed>=0?parsed:undefined; };
 const configuredMs = (name:string, fallback:number) => { const value=Number(process.env[name]); return Number.isFinite(value)&&value>0?value:fallback; };
 const safeMessage = (value:unknown) => typeof value==="string" ? value.slice(0, 240) : undefined;
 function candidateFromProvider(value:ProviderCandidate,language:LanguageCode):RecognitionCandidate|undefined{if(typeof value.concept!=="string")return;const concept=normalizeConcept(value.concept);if(!concept)return;const confidence=number(value.confidence);if(!Number.isFinite(confidence)||confidence<0||confidence>1)return;const candidate=candidateFor(concept.id,language,confidence);return {...candidate,sceneSuggestion:typeof value.scene==="string"&&isScene(value.scene)?value.scene:concept.defaultScene};}
@@ -28,8 +30,8 @@ export class RealVisionAdapter implements VisionAdapter {
     } finally { clearTimeout(timeout); }
   }
 
-  private async run({image,language,requestId,evaluation}:VisionRecognitionInput):Promise<VisionEvaluation>{
-    const startedAt=Date.now(); const key=process.env.VISION_API_KEY; const model=process.env.VISION_MODEL; const provider=process.env.VISION_PROVIDER;
+  private async run({image,language,requestId,evaluation,modelOverride}:VisionRecognitionInput):Promise<VisionEvaluation>{
+    const startedAt=Date.now(); const key=process.env.VISION_API_KEY; const model=evaluation&&modelOverride?modelOverride:process.env.VISION_MODEL; const provider=process.env.VISION_PROVIDER;
     if(!key||!model||provider!=="gemini")return {result:error(requestId,"PROVIDER_ERROR","Recognition is unavailable."),rawResponse:{error:"Gemini is not configured."},diagnostics:{providerDurationMs:0,parsingDurationMs:0,normalizationDurationMs:0,totalDurationMs:Date.now()-startedAt,retryCount:0,errorClass:"INVALID_RESPONSE"}};
     const providerTimeoutMs=configuredMs(evaluation?"VISION_EVALUATION_PROVIDER_TIMEOUT_MS":"VISION_PROVIDER_TIMEOUT_MS",evaluation?20000:8000);
     const bytes=Buffer.from(await image.arrayBuffer()); const mimeType=image.type||"image/jpeg";
@@ -41,9 +43,10 @@ export class RealVisionAdapter implements VisionAdapter {
     let attempt=0; let providerDurationMs=0; let latest:ProviderAttempt;
     do { latest=await this.providerRequest(url,body,providerTimeoutMs); providerDurationMs+=latest.providerDurationMs; if(!isTransient(latest.errorClass,latest.response?.status)||attempt===1)break; await new Promise(resolve=>setTimeout(resolve,500+Math.floor(Math.random()*501))); attempt+=1; } while(true);
     const response=latest!; const upstream=response.rawResponse as GeminiError|undefined; const upstreamStatus=response.response?.status;
+    const usage=response.rawResponse as GeminiUsage|undefined;
     const errorClass:VisionErrorClass|undefined=response.errorClass||(!response.response?.ok?(upstreamStatus===408?"PROVIDER_TIMEOUT":upstreamStatus===429?"UPSTREAM_429":upstreamStatus&&upstreamStatus>=500?"UPSTREAM_5XX":"UPSTREAM_4XX"):undefined);
     const outgoingRequestConfig={apiVersion:"v1beta" as const,generationConfig,hasSystemInstruction:true,contentPartKinds:["text","inlineData"] as ["text","inlineData"]};
-    const baseDiagnostics:RecognitionDiagnostics={providerDurationMs,parsingDurationMs:0,normalizationDurationMs:0,totalDurationMs:Date.now()-startedAt,retryCount:attempt,errorClass,upstreamHttpStatus:upstreamStatus,providerCode:typeof upstream?.error?.status==="string"?upstream.error.status:undefined,providerMessage:safeMessage(upstream?.error?.message),localAbortFired:response.localAbortFired,outgoingRequestConfig};
+    const baseDiagnostics:RecognitionDiagnostics={providerDurationMs,parsingDurationMs:0,normalizationDurationMs:0,totalDurationMs:Date.now()-startedAt,retryCount:attempt,errorClass,upstreamHttpStatus:upstreamStatus,providerCode:typeof upstream?.error?.status==="string"?upstream.error.status:undefined,providerMessage:safeMessage(upstream?.error?.message),localAbortFired:response.localAbortFired,outgoingRequestConfig,promptTokenCount:wholeNumber(usage?.usageMetadata?.promptTokenCount),outputTokenCount:wholeNumber(usage?.usageMetadata?.candidatesTokenCount),totalTokenCount:wholeNumber(usage?.usageMetadata?.totalTokenCount)};
     if(!response.response?.ok)return {result:error(requestId,errorClass==="PROVIDER_TIMEOUT"?"TIMEOUT":errorClass==="NETWORK_ERROR"?"NETWORK_ERROR":"PROVIDER_ERROR","Recognition is unavailable."),rawResponse:{upstreamHttpStatus:upstreamStatus,providerCode:baseDiagnostics.providerCode,providerMessage:baseDiagnostics.providerMessage,localAbortFired:response.localAbortFired},diagnostics:baseDiagnostics};
     const parsingStartedAt=Date.now(); const payload=response.rawResponse as {candidates?:Array<{content?:{parts?:Array<{text?:unknown}>}}>} ; const text=payload.candidates?.[0]?.content?.parts?.map(part=>typeof part.text==="string"?part.text:"").join(""); const parsed=parseContent(text); const parsingDurationMs=Date.now()-parsingStartedAt;
     const normalizationStartedAt=Date.now(); const result=toResult(parsed,language,requestId); const normalizationDurationMs=Date.now()-normalizationStartedAt;

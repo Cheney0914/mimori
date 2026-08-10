@@ -78,7 +78,7 @@ test("recognition service keeps mock and real selection behind the API", async (
 });
 
 test("vision evaluator remains temporary and does not write to the user world", async () => {
-  const source = await readFile(new URL("../app/dev/vision-test/page.tsx", import.meta.url), "utf8");
+  const source = await readFile(new URL("../components/vision-test-client.tsx", import.meta.url), "utf8");
   assert.match(source, /compressImage/);
   assert.match(source, /Raw provider response/);
   assert.match(source, /api\/recognize\?evaluation=1/);
@@ -92,7 +92,7 @@ test("vision evaluation raw output is gated outside production", async () => {
 
 test("vision playground shows only safe recognition metadata", async () => {
   const route = await readFile(new URL("../app/api/recognize/route.ts", import.meta.url), "utf8");
-  const page = await readFile(new URL("../app/dev/vision-test/page.tsx", import.meta.url), "utf8");
+  const page = await readFile(new URL("../components/vision-test-client.tsx", import.meta.url), "utf8");
   assert.match(route, /debug:\{recognitionMode,provider,model,requestId,providerDurationMs/);
   assert.match(page, /Request metadata/);
   assert.doesNotMatch(page, /VISION_API_KEY/);
@@ -110,11 +110,24 @@ test("vision latency adapter keeps evaluation timeout, one retry, and safe error
 });
 
 test("vision playground uses a bounded sequential three-run mode", async () => {
-  const source = await readFile(new URL("../app/dev/vision-test/page.tsx", import.meta.url), "utf8");
+  const source = await readFile(new URL("../components/vision-test-client.tsx", import.meta.url), "utf8");
   assert.match(source, /PLAYGROUND_TIMEOUT_MS = 25000/);
   assert.match(source, /index<\(repeat\?3:1\)/);
   assert.match(source, /Run same image 3 times/);
   assert.match(source, /CLIENT_TIMEOUT/);
+});
+
+test("vision playground model override is allowlisted and never used by Camera requests", async () => {
+  const route = await readFile(new URL("../app/api/recognize/route.ts", import.meta.url), "utf8");
+  const client = await readFile(new URL("../components/vision-test-client.tsx", import.meta.url), "utf8");
+  const models = await readFile(new URL("../lib/vision-playground.ts", import.meta.url), "utf8");
+  assert.match(models, /gemini-3\.6-flash/);
+  assert.match(models, /gemini-3\.5-flash-lite/);
+  assert.match(models, /gemini-3\.1-flash-lite/);
+  assert.match(route, /isVisionPlaygroundModel\(requestedModel\)/);
+  assert.match(route, /modelOverride:requestedModel\|\|undefined/);
+  assert.match(client, /playgroundModel/);
+  assert.match(client, /visionPlaygroundModels\.map/);
 });
 
 test("real adapter retries one provider timeout and reports it safely", async () => {
@@ -138,9 +151,9 @@ test("real adapter retries 429 once and preserves a confirmed result", async () 
 test("gemini-3.6 request uses only the minimal supported config and redacted diagnostics", async () => {
   await withVisionEnv(async () => {
     const RealVisionAdapter = await loadRealAdapter(); let body;
-    globalThis.fetch = async (_url, init) => { body = JSON.parse(init.body); return new Response(JSON.stringify({ candidates: [{ content: { parts: [{ text: JSON.stringify({ candidates: [{ concept: "mug", confidence: .9, scene: "kitchen" }] }) }] } }] }), { status: 200 }); };
+    globalThis.fetch = async (_url, init) => { body = JSON.parse(init.body); return new Response(JSON.stringify({ usageMetadata: { promptTokenCount: 41, candidatesTokenCount: 12, totalTokenCount: 53 }, candidates: [{ content: { parts: [{ text: JSON.stringify({ candidates: [{ concept: "mug", confidence: .9, scene: "kitchen" }] }) }] } }] }), { status: 200 }); };
     const evaluation = await new RealVisionAdapter().recognizeForEvaluation(visionInput());
-    assert.equal(evaluation.result.status, "confirmed"); assert.deepEqual(body.generationConfig, { responseMimeType: "application/json", maxOutputTokens: 128, thinkingConfig: { thinkingLevel: "minimal" } }); assert.equal("temperature" in body.generationConfig, false); assert.equal("thinkingBudget" in body.generationConfig.thinkingConfig, false); assert.equal(evaluation.diagnostics.outgoingRequestConfig.generationConfig.thinkingConfig.thinkingLevel, "minimal"); assert.doesNotMatch(JSON.stringify(evaluation.diagnostics.outgoingRequestConfig), /test-key-never-returned/);
+    assert.equal(evaluation.result.status, "confirmed"); assert.deepEqual(body.generationConfig, { responseMimeType: "application/json", maxOutputTokens: 128, thinkingConfig: { thinkingLevel: "minimal" } }); assert.equal("temperature" in body.generationConfig, false); assert.equal("thinkingBudget" in body.generationConfig.thinkingConfig, false); assert.equal(evaluation.diagnostics.outgoingRequestConfig.generationConfig.thinkingConfig.thinkingLevel, "minimal"); assert.equal(evaluation.diagnostics.promptTokenCount, 41); assert.equal(evaluation.diagnostics.outputTokenCount, 12); assert.equal(evaluation.diagnostics.totalTokenCount, 53); assert.doesNotMatch(JSON.stringify(evaluation.diagnostics.outgoingRequestConfig), /test-key-never-returned/);
   }, "gemini-3.6-flash");
 });
 
