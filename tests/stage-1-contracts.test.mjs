@@ -16,7 +16,7 @@ async function loadRealAdapter() {
   return module.exports.RealVisionAdapter;
 }
 
-async function withVisionEnv(run, model = "gemini-2.0-flash") {
+async function withVisionEnv(run, model = "gemini-3.5-flash-lite") {
   const previous = { fetch: globalThis.fetch, key: process.env.VISION_API_KEY, model: process.env.VISION_MODEL, provider: process.env.VISION_PROVIDER, timeout: process.env.VISION_EVALUATION_PROVIDER_TIMEOUT_MS };
   process.env.VISION_API_KEY = "test-key-never-returned";
   process.env.VISION_MODEL = model;
@@ -128,6 +128,36 @@ test("vision playground model override is allowlisted and never used by Camera r
   assert.match(route, /modelOverride:requestedModel\|\|undefined/);
   assert.match(client, /playgroundModel/);
   assert.match(client, /visionPlaygroundModels\.map/);
+});
+
+test("production Vision uses Flash Lite as its environment fallback", async () => {
+  const adapter = await readFile(new URL("../lib/real-vision-adapter.ts", import.meta.url), "utf8");
+  const route = await readFile(new URL("../app/api/recognize/route.ts", import.meta.url), "utf8");
+  const page = await readFile(new URL("../app/dev/vision-test/page.tsx", import.meta.url), "utf8");
+  const model = await readFile(new URL("../lib/vision-model.ts", import.meta.url), "utf8");
+  assert.match(model, /DEFAULT_VISION_MODEL = "gemini-3\.5-flash-lite"/);
+  assert.match(adapter, /process\.env\.VISION_MODEL\|\|DEFAULT_VISION_MODEL/);
+  assert.match(route, /process\.env\.VISION_MODEL \|\| DEFAULT_VISION_MODEL/);
+  assert.match(page, /DEFAULT_VISION_MODEL/);
+});
+
+test("evaluation distinguishes a recognized unsupported concept from Vision failure", async () => {
+  await withVisionEnv(async () => {
+    const RealVisionAdapter = await loadRealAdapter();
+    globalThis.fetch = async () => new Response(JSON.stringify({ candidates: [{ content: { parts: [{ text: JSON.stringify({ candidates: [{ concept: "water bottle", confidence: .94, scene: "kitchen" }] }) }] } }] }), { status: 200 });
+    const evaluation = await new RealVisionAdapter().recognizeForEvaluation(visionInput());
+    assert.equal(evaluation.result.status, "error");
+    assert.equal(evaluation.result.code, "NO_CLEAR_OBJECT");
+    assert.equal(evaluation.diagnostics.rawVisionConcept, "water bottle");
+    assert.equal(evaluation.diagnostics.recognitionStatus, "recognized");
+    assert.equal(evaluation.diagnostics.normalizationStatus, "unsupported concept");
+    assert.equal(evaluation.diagnostics.suggestedEvaluationType, "UNKNOWN_CONCEPT");
+  });
+});
+
+test("local evaluation supports product-layer result classifications", async () => {
+  const source = await readFile(new URL("../lib/vision-evaluation-store.ts", import.meta.url), "utf8");
+  for (const value of ["PASS", "VISION", "NORMALIZATION", "UNKNOWN_CONCEPT", "LANGUAGE_EN", "LANGUAGE_JA", "SCENE", "MULTI_OBJECT", "TECHNICAL"]) assert.match(source, new RegExp(`"${value}"`));
 });
 
 test("real adapter retries one provider timeout and reports it safely", async () => {

@@ -2,6 +2,12 @@
 
 Use this as the shareable, manual record of real-provider evaluation. Browser-local results from `/dev/vision-test` are intentionally not synchronised here, and no images are stored in either place.
 
+## PRELIMINARY MVP MODEL DECISION
+
+Primary: `gemini-3.5-flash-lite`
+
+The current five-image comparison showed the same successful semantic recognition as Gemini 3.1 Flash-Lite with lower observed average latency. It is also much less expensive than Gemini 3.6 Flash, which encountered quota/rate-limit failures during evaluation. This task has not yet shown a quality advantage that requires Gemini 3.6 Flash. Revisit this preliminary choice after the full concept evaluation.
+
 | Object | Expected Concept | Vision Output | Normalized Concept | English | Japanese | Result | Notes |
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | mug | mug | Pending | Pending | Pending | Pending | Pending | Handled coffee mug. |

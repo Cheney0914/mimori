@@ -2,6 +2,7 @@ import { candidateFor, normalizeConcept } from "@/lib/recognition";
 import { isScene } from "@/lib/scenes";
 import { LanguageCode, RecognitionCandidate, RecognitionResult } from "@/lib/types";
 import { RecognitionDiagnostics, VisionAdapter, VisionErrorClass, VisionEvaluation, VisionRecognitionInput } from "@/lib/vision-adapter";
+import { DEFAULT_VISION_MODEL } from "@/lib/vision-model";
 
 type ProviderCandidate = { concept?: unknown; confidence?: unknown; scene?: unknown };
 type ProviderPayload = { candidates?: unknown };
@@ -31,8 +32,8 @@ export class RealVisionAdapter implements VisionAdapter {
   }
 
   private async run({image,language,requestId,evaluation,modelOverride}:VisionRecognitionInput):Promise<VisionEvaluation>{
-    const startedAt=Date.now(); const key=process.env.VISION_API_KEY; const model=evaluation&&modelOverride?modelOverride:process.env.VISION_MODEL; const provider=process.env.VISION_PROVIDER;
-    if(!key||!model||provider!=="gemini")return {result:error(requestId,"PROVIDER_ERROR","Recognition is unavailable."),rawResponse:{error:"Gemini is not configured."},diagnostics:{providerDurationMs:0,parsingDurationMs:0,normalizationDurationMs:0,totalDurationMs:Date.now()-startedAt,retryCount:0,errorClass:"INVALID_RESPONSE"}};
+    const startedAt=Date.now(); const key=process.env.VISION_API_KEY; const model=evaluation&&modelOverride?modelOverride:(process.env.VISION_MODEL||DEFAULT_VISION_MODEL); const provider=process.env.VISION_PROVIDER;
+    if(!key||provider!=="gemini")return {result:error(requestId,"PROVIDER_ERROR","Recognition is unavailable."),rawResponse:{error:"Gemini is not configured."},diagnostics:{providerDurationMs:0,parsingDurationMs:0,normalizationDurationMs:0,totalDurationMs:Date.now()-startedAt,retryCount:0,errorClass:"INVALID_RESPONSE"}};
     const providerTimeoutMs=configuredMs(evaluation?"VISION_EVALUATION_PROVIDER_TIMEOUT_MS":"VISION_PROVIDER_TIMEOUT_MS",evaluation?20000:8000);
     const bytes=Buffer.from(await image.arrayBuffer()); const mimeType=image.type||"image/jpeg";
     const generationConfig:{temperature?:number;responseMimeType:string;maxOutputTokens:number;thinkingConfig?:{thinkingBudget?:number;thinkingLevel?:"minimal"|"low"|"medium"|"high"}}={responseMimeType:"application/json",maxOutputTokens:128};
@@ -50,6 +51,7 @@ export class RealVisionAdapter implements VisionAdapter {
     if(!response.response?.ok)return {result:error(requestId,errorClass==="PROVIDER_TIMEOUT"?"TIMEOUT":errorClass==="NETWORK_ERROR"?"NETWORK_ERROR":"PROVIDER_ERROR","Recognition is unavailable."),rawResponse:{upstreamHttpStatus:upstreamStatus,providerCode:baseDiagnostics.providerCode,providerMessage:baseDiagnostics.providerMessage,localAbortFired:response.localAbortFired},diagnostics:baseDiagnostics};
     const parsingStartedAt=Date.now(); const payload=response.rawResponse as {candidates?:Array<{content?:{parts?:Array<{text?:unknown}>}}>} ; const text=payload.candidates?.[0]?.content?.parts?.map(part=>typeof part.text==="string"?part.text:"").join(""); const parsed=parseContent(text); const parsingDurationMs=Date.now()-parsingStartedAt;
     const normalizationStartedAt=Date.now(); const result=toResult(parsed,language,requestId); const normalizationDurationMs=Date.now()-normalizationStartedAt;
-    return {result,rawResponse:response.rawResponse,diagnostics:{...baseDiagnostics,parsingDurationMs,normalizationDurationMs,totalDurationMs:Date.now()-startedAt}};
+    const rawPrimary=Array.isArray(parsed?.candidates)?parsed.candidates[0] as ProviderCandidate|undefined:undefined; const rawVisionConcept=typeof rawPrimary?.concept==="string"?rawPrimary.concept.trim().slice(0,120):undefined; const rawConfidence=number(rawPrimary?.confidence); const providerRecognized=Boolean(rawVisionConcept&&Number.isFinite(rawConfidence)&&rawConfidence>=.72); const unsupportedConcept=providerRecognized&&result.status==="error"&&result.code==="NO_CLEAR_OBJECT";
+    return {result,rawResponse:response.rawResponse,diagnostics:{...baseDiagnostics,parsingDurationMs,normalizationDurationMs,totalDurationMs:Date.now()-startedAt,rawVisionConcept,recognitionStatus:providerRecognized?"recognized":"not_recognized",normalizationStatus:unsupportedConcept?"unsupported concept":result.status==="confirmed"||result.status==="needs_confirmation"?"matched":"no controlled concept match",suggestedEvaluationType:unsupportedConcept?"UNKNOWN_CONCEPT":undefined}};
   }
 }

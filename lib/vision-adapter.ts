@@ -3,6 +3,7 @@ import { VisionPlaygroundModel } from "@/lib/vision-playground";
 
 export type VisionRecognitionInput = { image: Blob; language: LanguageCode; requestId: string; evaluation?: boolean; modelOverride?: VisionPlaygroundModel };
 export type VisionErrorClass = "PROVIDER_TIMEOUT" | "CLIENT_TIMEOUT" | "UPSTREAM_429" | "UPSTREAM_5XX" | "NETWORK_ERROR" | "UPSTREAM_4XX" | "INVALID_RESPONSE";
+export type VisionEvaluationType = "PASS" | "VISION" | "NORMALIZATION" | "UNKNOWN_CONCEPT" | "LANGUAGE_EN" | "LANGUAGE_JA" | "SCENE" | "MULTI_OBJECT" | "TECHNICAL";
 export type RecognitionDiagnostics = {
   providerDurationMs: number;
   parsingDurationMs: number;
@@ -23,6 +24,10 @@ export type RecognitionDiagnostics = {
   promptTokenCount?: number;
   outputTokenCount?: number;
   totalTokenCount?: number;
+  rawVisionConcept?: string;
+  recognitionStatus?: "recognized" | "not_recognized";
+  normalizationStatus?: "matched" | "unsupported concept" | "no controlled concept match";
+  suggestedEvaluationType?: VisionEvaluationType;
 };
 export type VisionEvaluation = { result: RecognitionResult; rawResponse: unknown; diagnostics: RecognitionDiagnostics };
 

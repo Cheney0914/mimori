@@ -1,5 +1,5 @@
 "use client";
-export type EvaluationVerdict = "pending" | "pass" | "fail";
+export type EvaluationVerdict = "PASS" | "VISION" | "NORMALIZATION" | "UNKNOWN_CONCEPT" | "LANGUAGE_EN" | "LANGUAGE_JA" | "SCENE" | "MULTI_OBJECT" | "TECHNICAL";
 export type VisionEvaluationRecord = { id: string; createdAt: string; testCase: string; expectedConcept: string; visionOutput: string; normalizedConcept: string; english: string; japanese: string; result: EvaluationVerdict; notes: string };
 const key = "name-the-world:vision-evaluation-results:v1";
 export const visionEvaluationStore = {

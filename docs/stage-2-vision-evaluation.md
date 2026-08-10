@@ -4,6 +4,8 @@ Use `/dev/vision-test` with `RECOGNITION_MODE=real`, Gemini credentials, and `VI
 
 `Pending` means the sample still needs a real-device, real-provider run; it is not a pass.
 
+For browser-local evaluation records, use `PASS` or the layer-specific classification `VISION`, `NORMALIZATION`, `UNKNOWN_CONCEPT`, `LANGUAGE_EN`, `LANGUAGE_JA`, `SCENE`, `MULTI_OBJECT`, or `TECHNICAL`. `UNKNOWN_CONCEPT` means Vision returned a clear concept but the controlled Concept Normalizer had no match; it is not a Vision-recognition failure and does not authorize adding the concept to the taxonomy.
+
 | Group | Object / image to capture | Vision output | Normalized concept | Correct? | Notes |
 | --- | --- | --- | --- | --- | --- |
 | Kitchen | mug | Pending | mug | Pending | Include a handled coffee mug. |
