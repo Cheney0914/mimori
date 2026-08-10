@@ -165,3 +165,16 @@ test("real adapter treats INVALID_ARGUMENT 400 as non-retryable", async () => {
     assert.equal(calls, 1); assert.equal(evaluation.diagnostics.retryCount, 0); assert.equal(evaluation.diagnostics.errorClass, "UPSTREAM_4XX");
   });
 });
+
+test("mobile sheets keep a fixed horizontal anchor and shared dismissal wiring", async () => {
+  const overlay = await readFile(new URL("../components/mobile-overlay.tsx", import.meta.url), "utf8");
+  const wordDetail = await readFile(new URL("../components/word-detail-sheet.tsx", import.meta.url), "utf8");
+  const scanResult = await readFile(new URL("../components/scan-result-sheet.tsx", import.meta.url), "utf8");
+  const css = await readFile(new URL("../app/wiring.css", import.meta.url), "utf8");
+  assert.match(overlay, /offset > 100 \|\| velocity > \.65/);
+  assert.match(overlay, /event\.key === "Escape"/);
+  assert.match(wordDetail, /label="Word detail" onDismiss=\{onClose\}/);
+  assert.match(scanResult, /label="Recognition result" onDismiss=\{onClose\}/);
+  assert.match(css, /translateX\(-50%\) translateY\(var\(--sheet-drag-y,0\)\)/);
+  assert.match(css, /@keyframes mobileSheetEnter/);
+});
