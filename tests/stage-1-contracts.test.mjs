@@ -16,10 +16,10 @@ async function loadRealAdapter() {
   return module.exports.RealVisionAdapter;
 }
 
-async function withVisionEnv(run) {
+async function withVisionEnv(run, model = "gemini-2.0-flash") {
   const previous = { fetch: globalThis.fetch, key: process.env.VISION_API_KEY, model: process.env.VISION_MODEL, provider: process.env.VISION_PROVIDER, timeout: process.env.VISION_EVALUATION_PROVIDER_TIMEOUT_MS };
   process.env.VISION_API_KEY = "test-key-never-returned";
-  process.env.VISION_MODEL = "gemini-2.0-flash";
+  process.env.VISION_MODEL = model;
   process.env.VISION_PROVIDER = "gemini";
   process.env.VISION_EVALUATION_PROVIDER_TIMEOUT_MS = "5";
   try { await run(); } finally { globalThis.fetch = previous.fetch; const names = { key: "VISION_API_KEY", model: "VISION_MODEL", provider: "VISION_PROVIDER", timeout: "VISION_EVALUATION_PROVIDER_TIMEOUT_MS" }; for (const [key, value] of Object.entries(previous)) { if (key !== "fetch") { const envKey = names[key]; if (value === undefined) delete process.env[envKey]; else process.env[envKey] = value; } } }
@@ -135,7 +135,16 @@ test("real adapter retries 429 once and preserves a confirmed result", async () 
   });
 });
 
-test("real adapter does not retry upstream 400 responses", async () => {
+test("gemini-3.6 request uses only the minimal supported config and redacted diagnostics", async () => {
+  await withVisionEnv(async () => {
+    const RealVisionAdapter = await loadRealAdapter(); let body;
+    globalThis.fetch = async (_url, init) => { body = JSON.parse(init.body); return new Response(JSON.stringify({ candidates: [{ content: { parts: [{ text: JSON.stringify({ candidates: [{ concept: "mug", confidence: .9, scene: "kitchen" }] }) }] } }] }), { status: 200 }); };
+    const evaluation = await new RealVisionAdapter().recognizeForEvaluation(visionInput());
+    assert.equal(evaluation.result.status, "confirmed"); assert.deepEqual(body.generationConfig, { responseMimeType: "application/json", maxOutputTokens: 128, thinkingConfig: { thinkingLevel: "minimal" } }); assert.equal("temperature" in body.generationConfig, false); assert.equal("thinkingBudget" in body.generationConfig.thinkingConfig, false); assert.equal(evaluation.diagnostics.outgoingRequestConfig.generationConfig.thinkingConfig.thinkingLevel, "minimal"); assert.doesNotMatch(JSON.stringify(evaluation.diagnostics.outgoingRequestConfig), /test-key-never-returned/);
+  }, "gemini-3.6-flash");
+});
+
+test("real adapter treats INVALID_ARGUMENT 400 as non-retryable", async () => {
   await withVisionEnv(async () => {
     const RealVisionAdapter = await loadRealAdapter(); let calls = 0;
     globalThis.fetch = async () => { calls += 1; return new Response(JSON.stringify({ error: { status: "INVALID_ARGUMENT", message: "Bad request" } }), { status: 400 }); };

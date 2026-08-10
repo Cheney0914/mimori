@@ -13,6 +13,12 @@ export type RecognitionDiagnostics = {
   providerCode?: string;
   providerMessage?: string;
   localAbortFired?: boolean;
+  outgoingRequestConfig?: {
+    apiVersion: "v1beta";
+    generationConfig: Record<string, unknown>;
+    hasSystemInstruction: boolean;
+    contentPartKinds: ["text", "inlineData"];
+  };
 };
 export type VisionEvaluation = { result: RecognitionResult; rawResponse: unknown; diagnostics: RecognitionDiagnostics };
 
